@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">FloatMap</string>
+    <string name="accessibility_desc">FloatMap needs Accessibility to detect and read
+        from Grab Driver\'s job card.</string>
+    <string name="tvMain_desc">Use this button to access the floating MAP. While in this
+        activity, you may move the floating BUTTON around to your desired location. Please
+        do keep this activity alive so the service remains alive.</string>
+</resources>
