@@ -310,6 +310,8 @@ public class MapService extends AccessibilityService {
                 case ACTION_START_MAP_SERVICE:
                     Log.v("MapService", "MapService: onStartCommand(), ACTION_START_MAP_SERVICE");
                     if (!mButton.isShown()) mWindowManager.addView(mButton, mButtonParams);
+                    mPreferences.edit().putBoolean("isServiceEnabled", true).apply();
+
                     startForeground(1, mNotification);
                     break;
                 case ACTION_STOP_MAP_SERVICE:
