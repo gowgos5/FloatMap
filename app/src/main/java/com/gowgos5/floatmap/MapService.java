@@ -3,17 +3,17 @@ package com.gowgos5.floatmap;
 import android.accessibilityservice.AccessibilityService;
 import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
-import android.app.AlarmManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.graphics.PixelFormat;
 import android.net.Uri;
 import android.os.Build;
-import android.os.SystemClock;
+import android.preference.PreferenceManager;
 import android.support.v4.app.NotificationCompat;
 import android.util.Log;
 import android.util.Pair;
@@ -40,9 +40,9 @@ public class MapService extends AccessibilityService {
     public static final String ACTION_SPAWN_BUTTON_MAP_SERVICE = "SPAWN_BUTTON_MAP_SERVICE";
 
     private static final String BASE_MAP_URL = "https://www.google.com/maps/dir/?api=1";
-    private static final String DEFAULT_MAP_URL = "https://www.google.com/maps/";
     private static final String ALLOWED_URI_CHARS = "@#&=*+-_.,:!?()/~'%";
 
+    private SharedPreferences mPreferences;
     private Notification mNotification;
     private WindowManager mWindowManager;
     private WindowManager.LayoutParams mButtonParams;
@@ -52,9 +52,7 @@ public class MapService extends AccessibilityService {
 
     private ArrayList<Pair<String, CharSequence>> mNodesList;
     private Pair<String, String> mAddresses;
-    private String mMapUrl;
-
-    private boolean isMapVisible = false;
+    private String mMapUrl = "https://www.google.com/maps/";
 
     private void createNotification() {
         // Create the NotificationChannel, but only on API 26+ because
@@ -104,64 +102,83 @@ public class MapService extends AccessibilityService {
         mButtonParams.gravity = Gravity.CENTER;
         mButtonParams.x = 0;
         mButtonParams.y = 0;
-        mButtonParams.width = 150;
-        mButtonParams.height = 150;
+        mButtonParams.width = 120;
+        mButtonParams.height = 120;
 
         mButton = new ImageView(this);
         mButton.setImageResource(R.drawable.ic_map);
         //noinspection AndroidLintClickableViewAccessibility
         mButton.setOnTouchListener(new View.OnTouchListener() {
+            private static final int MAX_CLICK_DURATION = 1000;
+            private static final int MAX_CLICK_DISTANCE = 15;
+
             private int initialX;
             private int initialY;
             private float initialTouchX;
             private float initialTouchY;
+            private long pressStartTime;
+            private boolean stayedWithinClickDistance;
+
+            private float distance(float x1, float y1, float x2, float y2) {
+                float dx = x1 - x2;
+                float dy = y1 - y2;
+                float distanceInPx = (float) Math.sqrt(dx * dx + dy * dy);
+                return pxToDp(distanceInPx);
+            }
+
+            private float pxToDp(float px) {
+                return px / getResources().getDisplayMetrics().density;
+            }
 
             @Override
             public boolean onTouch(View v, MotionEvent event) {
-                if (MainActivity.ACTIVITY_STATE_ACTIVE) {
-                    switch (event.getAction()) {
-                        case MotionEvent.ACTION_DOWN:
-                            // get initial position.
-                            initialX = mButtonParams.x;
-                            initialY = mButtonParams.y;
+                switch (event.getAction()) {
+                    case MotionEvent.ACTION_DOWN:
+                        pressStartTime = System.currentTimeMillis();
+                        stayedWithinClickDistance = true;
 
-                            // get touch location.
-                            initialTouchX = event.getRawX();
-                            initialTouchY = event.getRawY();
+                        // get initial position.
+                        initialX = mButtonParams.x;
+                        initialY = mButtonParams.y;
 
-                            return true;
-                        case MotionEvent.ACTION_MOVE:
-                            // Calculate the X and Y coordinates of the button.
-                            mButtonParams.x = initialX + (int) (event.getRawX() - initialTouchX);
-                            mButtonParams.y = initialY + (int) (event.getRawY() - initialTouchY);
+                        // get touch location.
+                        initialTouchX = event.getRawX();
+                        initialTouchY = event.getRawY();
 
-                            // Update the button's position.
-                            mWindowManager.updateViewLayout(mButton, mButtonParams);
+                        break;
+                    case MotionEvent.ACTION_UP:
+                        long pressDuration = System.currentTimeMillis() - pressStartTime;
 
-                            return true;
-                    }
+                        if (pressDuration < MAX_CLICK_DURATION && stayedWithinClickDistance) {
+                            if (!mMap.isShown()) {
+                                createFloatingMapView();
+                                mWindowManager.addView(mMap, mMapParams);
 
-                    return false;
-                } else {
-                    if (event.getAction() == MotionEvent.ACTION_UP) {
-                        if (!isMapVisible) {
-                            mMap.loadUrl(mMapUrl);
-                            mWindowManager.addView(mMap, mMapParams);
-
-                            // Bring floating button to the topmost view
-                            mWindowManager.removeView(mButton);
-                            mWindowManager.addView(mButton, mButtonParams);
-                        } else {
-                            mWindowManager.removeView(mMap);
+                                // Bring floating button to the topmost view
+                                if (mButton.isShown()) mWindowManager.removeView(mButton);
+                                mWindowManager.addView(mButton, mButtonParams);
+                            } else {
+                                mWindowManager.removeView(mMap);
+                            }
                         }
 
-                        isMapVisible = !isMapVisible;
+                        break;
+                    case MotionEvent.ACTION_MOVE:
+                        if (stayedWithinClickDistance && distance(initialTouchX, initialTouchY,
+                                event.getRawX(), event.getRawY()) > MAX_CLICK_DISTANCE) {
+                            stayedWithinClickDistance = false;
+                        }
 
-                        return true;
-                    }
+                        mButtonParams.x = initialX + (int) (event.getRawX() - initialTouchX);
+                        mButtonParams.y = initialY + (int) (event.getRawY() - initialTouchY);
 
-                    return false;
+                        // Update the button's position.
+                        mWindowManager.updateViewLayout(mButton, mButtonParams);
+
+                        break;
                 }
+
+                return true;
             }
         });
     }
@@ -172,7 +189,8 @@ public class MapService extends AccessibilityService {
                 WindowManager.LayoutParams.MATCH_PARENT,
                 WindowManager.LayoutParams.MATCH_PARENT,
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE |
+                        WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
                 PixelFormat.TRANSLUCENT);
         mMapParams.gravity = Gravity.CENTER;
 
@@ -184,7 +202,9 @@ public class MapService extends AccessibilityService {
         });
         mMap.getSettings().setGeolocationEnabled(true);
         mMap.getSettings().setJavaScriptEnabled(true);
-        mMap.loadUrl(DEFAULT_MAP_URL);
+        mMap.getSettings().setJavaScriptCanOpenWindowsAutomatically(true);
+        mMap.getSettings().setBuiltInZoomControls(true);
+        mMap.loadUrl(mMapUrl);
     }
 
     private void getNodeChildren(AccessibilityNodeInfo node) {
@@ -237,60 +257,25 @@ public class MapService extends AccessibilityService {
     }
 
     @Override
-    public void onCreate() {
-        Log.v("MapService", "onCreate()");
-        super.onCreate();
-
-        createNotification();
-        createFloatingButton();
-        createFloatingMapView();
-        mWindowManager.addView(mButton, mButtonParams);
-    }
-
-    @Override
-    public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent.getAction() != null) {
-            switch (intent.getAction()) {
-                case ACTION_START_MAP_SERVICE:
-                    Log.v("MapService", "MapService started.");
-                    startForeground(1, mNotification);
-                    break;
-                case ACTION_STOP_MAP_SERVICE:
-                    Log.v("MapService", "MapService terminated.");
-                    stopForeground(true);
-                    stopSelf();
-                    break;
-                case ACTION_SPAWN_BUTTON_MAP_SERVICE:
-                    Log.v("MapService", "Floating button respawned");
-                    Toast.makeText(this, "Button respawned", Toast.LENGTH_LONG).show();
-                    mWindowManager.removeView(mButton);
-                    mWindowManager.addView(mButton, mButtonParams);
-                    break;
-            }
-        }
-
-        return START_STICKY;
-        // return super.onStartCommand(intent, flags, startId);
-    }
-
-    @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
+        if (!mPreferences.getBoolean("isServiceEnabled", true)) return;
+
         final int eventType = event.getEventType();
 
         // For debugging purposes
+        Log.v("MapService", event.toString());
         Log.v("MapService", String.format(
                 "onAccessibilityEvent: type = [ %s ], class = [ %s ], package = [ %s ]" +
                         ", time = [ %s ], text = [ %s ]",
                 eventType, event.getClassName(), event.getPackageName(),
                 event.getEventTime(), event.getText()));
 
-        // Heartbeat
+        // Heartbeat (KIV)
         Toast.makeText(getBaseContext(), "TYPE_WINDOW_STATE_CHANGED detected", Toast.LENGTH_SHORT).show();
 
         // Check if job card is received from Grab Driver App
         if ((event.getText().contains("Accept") && event.getClassName().equals("android.view.ViewGroup"))) {
             Log.v("MapService", "Job card received");
-            Toast.makeText(getBaseContext(), "Job card received!", Toast.LENGTH_LONG).show();
 
             AccessibilityNodeInfo source = event.getSource();
             mNodesList = new ArrayList<>();
@@ -298,13 +283,53 @@ public class MapService extends AccessibilityService {
             getAddresses();
             updateMapUrl();
 
-            Log.v("MapService", "Pickup Address: " + mAddresses.first);
-            Log.v("MapService", "Dropoff Address: " + mAddresses.second);
-
             // Bring floating button to the topmost view
-            mWindowManager.removeView(mButton);
+            if (mButton.isShown()) mWindowManager.removeView(mButton);
             mWindowManager.addView(mButton, mButtonParams);
         }
+    }
+
+    @Override
+    public void onCreate() {
+        Log.v("MapService", "MapService: onCreate()");
+        super.onCreate();
+
+        createNotification();
+        createFloatingButton();
+        createFloatingMapView();
+
+        mPreferences = PreferenceManager.getDefaultSharedPreferences(getBaseContext());
+        mPreferences.edit().putBoolean("isServiceEnabled", true).apply();
+        if (!mButton.isShown()) mWindowManager.addView(mButton, mButtonParams);
+    }
+
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        if (intent.getAction() != null) {
+            switch (intent.getAction()) {
+                case ACTION_START_MAP_SERVICE:
+                    Log.v("MapService", "MapService: onStartCommand(), ACTION_START_MAP_SERVICE");
+                    if (!mButton.isShown()) mWindowManager.addView(mButton, mButtonParams);
+                    startForeground(1, mNotification);
+                    break;
+                case ACTION_STOP_MAP_SERVICE:
+                    Log.v("MapService", "MapService: onStartCommand(), ACTION_STOP_MAP_SERVICE");
+                    if (mButton.isShown()) mWindowManager.removeView(mButton);
+                    if (mMap.isShown()) mWindowManager.removeView(mMap);
+                    mPreferences.edit().putBoolean("isServiceEnabled", false).apply();
+
+                    stopForeground(true);
+                    stopSelf();
+                    break;
+                case ACTION_SPAWN_BUTTON_MAP_SERVICE:
+                    Log.v("MapService", "MapService: onStartCommand(), ACTION_SPAWN_BUTTON_MAP_SERVICE");
+                    if (mButton.isShown()) mWindowManager.removeView(mButton);
+                    mWindowManager.addView(mButton, mButtonParams);
+                    break;
+            }
+        }
+
+        return START_STICKY;
     }
 
     @Override
@@ -314,23 +339,7 @@ public class MapService extends AccessibilityService {
 
     @Override
     public void onDestroy() {
+        Log.v("MapService", "MapService: onDestroy()");
         super.onDestroy();
-        if (mButton != null) mWindowManager.removeView(mButton);
-    }
-
-    @Override
-    public void onTaskRemoved(Intent rootIntent){
-        Intent restartServiceIntent = new Intent(getApplicationContext(), this.getClass());
-        restartServiceIntent.setPackage(getPackageName());
-
-        PendingIntent restartServicePendingIntent = PendingIntent.getService(getApplicationContext()
-                , 1, restartServiceIntent, PendingIntent.FLAG_ONE_SHOT);
-        AlarmManager alarmService = (AlarmManager) getApplicationContext().getSystemService(Context.ALARM_SERVICE);
-        alarmService.set(
-                AlarmManager.ELAPSED_REALTIME,
-                SystemClock.elapsedRealtime() + 1000,
-                restartServicePendingIntent);
-
-        super.onTaskRemoved(rootIntent);
     }
 }

@@ -2,7 +2,8 @@
     <string name="app_name">FloatMap</string>
     <string name="accessibility_desc">FloatMap needs Accessibility to detect and read
         from Grab Driver\'s job card.</string>
-    <string name="tvMain_desc">Use this button to access the floating MAP. While in this
-        activity, you may move the floating BUTTON around to your desired location. Please
-        do keep this activity alive so the service remains alive.</string>
+    <string name="tvMain_desc">The sole purpose of this Activity is to solicit the required system
+        permissions from you. Once the foreground Service is activated, you may clear this Activity
+        from your RECENT APPS LIST. Subsequently, you may use the floating button to access the
+        floating map overlay.</string>
 </resources>

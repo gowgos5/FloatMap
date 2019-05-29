@@ -14,11 +14,11 @@ import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.text.TextUtils;
+import android.util.Log;
 
 @TargetApi(23)
 public class MainActivity extends AppCompatActivity {
     private static final int PERMISSIONS_REQUEST_ACCESS_FINE_LOCATION = 1;
-    public static boolean ACTIVITY_STATE_ACTIVE;
 
     private AlertDialog mDrawDialog;
     private AlertDialog mAccessDialog;
@@ -75,6 +75,7 @@ public class MainActivity extends AppCompatActivity {
         if (drawOn && accessibilityOn && locationOn) {
             mDrawDialog.cancel();
             mAccessDialog.cancel();
+
             startService(new Intent(this, MapService.class)
                     .setAction(MapService.ACTION_START_MAP_SERVICE));
         } else {
@@ -101,6 +102,7 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        Log.v("MainActivity", "MainActivity: onCreate()");
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
@@ -125,7 +127,7 @@ public class MainActivity extends AppCompatActivity {
 
         mAccessDialog = new AlertDialog.Builder(this)
                 .setTitle("Enable Accessibility Services")
-                .setMessage("FloatMap uses Accessibility Services to detect job card from Grab Driver.")
+                .setMessage("FloatMap uses Accessibility Services to detect job cards from Grab Driver.")
                 .setPositiveButton("Go to Settings", new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialog, int which) {
@@ -140,26 +142,38 @@ public class MainActivity extends AppCompatActivity {
                 })
                 .setCancelable(false)
                 .create();
-        
-        checkRequiredPermissions();
+    }
+
+    @Override
+    protected void onStart() {
+        Log.v("MainActivity", "MainActivity: onStart()");
+
+        super.onStart();
     }
 
     @Override
     protected void onResume() {
+        Log.v("MainActivity", "MainActivity: onResume()");
         super.onResume();
+
         checkRequiredPermissions();
-        ACTIVITY_STATE_ACTIVE = true;
     }
 
     @Override
     protected void onPause() {
+        Log.v("MainActivity", "MainActivity: onPause()");
         super.onPause();
-        ACTIVITY_STATE_ACTIVE = false;
     }
 
     @Override
     protected void onStop() {
+        Log.v("MainActivity", "MainActivity: onStop()");
         super.onStop();
-        ACTIVITY_STATE_ACTIVE = false;
+    }
+
+    @Override
+    protected void onDestroy() {
+        Log.v("MainActivity", "MainActivity: onDestroy()");
+        super.onDestroy();
     }
 }
