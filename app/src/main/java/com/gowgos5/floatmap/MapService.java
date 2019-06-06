@@ -27,6 +27,7 @@ import android.webkit.GeolocationPermissions;
 import android.webkit.WebChromeClient;
 import android.webkit.WebView;
 import android.widget.ImageView;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import java.util.ArrayList;
@@ -256,6 +257,25 @@ public class MapService extends AccessibilityService {
         return "";
     }
 
+    private static void logViewHierarchy(AccessibilityNodeInfo nodeInfo, final int depth) {
+        if (nodeInfo == null) return;
+
+        String s = "";
+        for (int i = 0; i < depth; ++i) {
+            s = s.concat("-");
+        }
+
+        s = s.concat(nodeInfo.getClassName() + " " + nodeInfo.getViewIdResourceName());
+        if ("android.widget.TextView".contentEquals(nodeInfo.getClassName())) {
+            s = s.concat(" " + nodeInfo.getText());
+        }
+        Log.d("MapService", s);
+
+        for (int i = 0; i < nodeInfo.getChildCount(); ++i) {
+            logViewHierarchy(nodeInfo.getChild(i), depth + 1);
+        }
+    }
+
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
         if (!mPreferences.getBoolean("isServiceEnabled", true)) return;
@@ -263,15 +283,17 @@ public class MapService extends AccessibilityService {
         final int eventType = event.getEventType();
 
         // For debugging purposes
-        Log.v("MapService", event.toString());
-        Log.v("MapService", String.format(
+        Log.d("MapService", event.toString());
+        Log.d("MapService", String.format(
                 "onAccessibilityEvent: type = [ %s ], class = [ %s ], package = [ %s ]" +
                         ", time = [ %s ], text = [ %s ]",
                 eventType, event.getClassName(), event.getPackageName(),
                 event.getEventTime(), event.getText()));
+        logViewHierarchy(getRootInActiveWindow(), 0);
 
-        // Heartbeat (KIV)
-        Toast.makeText(getBaseContext(), "TYPE_WINDOW_STATE_CHANGED detected", Toast.LENGTH_SHORT).show();
+        // Heartbeat
+        if (eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED && event.getPackageName().equals("com.grabtaxi.driver2"))
+            Toast.makeText(getBaseContext(), "TYPE_WINDOW_STATE_CHANGED detected", Toast.LENGTH_SHORT).show();
 
         // Check if job card is received from Grab Driver App
         if ((event.getText().contains("Accept") && event.getClassName().equals("android.view.ViewGroup"))) {
@@ -301,24 +323,24 @@ public class MapService extends AccessibilityService {
         mPreferences = PreferenceManager.getDefaultSharedPreferences(getBaseContext());
         mPreferences.edit().putBoolean("isServiceEnabled", true).apply();
         if (!mButton.isShown()) mWindowManager.addView(mButton, mButtonParams);
+        startForeground(1, mNotification);
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent.getAction() != null) {
+        if (intent != null && intent.getAction() != null) {
             switch (intent.getAction()) {
                 case ACTION_START_MAP_SERVICE:
                     Log.v("MapService", "MapService: onStartCommand(), ACTION_START_MAP_SERVICE");
                     if (!mButton.isShown()) mWindowManager.addView(mButton, mButtonParams);
-                    mPreferences.edit().putBoolean("isServiceEnabled", true).apply();
 
                     startForeground(1, mNotification);
                     break;
                 case ACTION_STOP_MAP_SERVICE:
                     Log.v("MapService", "MapService: onStartCommand(), ACTION_STOP_MAP_SERVICE");
+                    mPreferences.edit().putBoolean("isServiceEnabled", false).apply();
                     if (mButton.isShown()) mWindowManager.removeView(mButton);
                     if (mMap.isShown()) mWindowManager.removeView(mMap);
-                    mPreferences.edit().putBoolean("isServiceEnabled", false).apply();
 
                     stopForeground(true);
                     stopSelf();
@@ -336,7 +358,7 @@ public class MapService extends AccessibilityService {
 
     @Override
     public void onInterrupt() {
-
+        Log.v("MapService", "MapService: onInterrupt()");
     }
 
     @Override
