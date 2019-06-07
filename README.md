@@ -2,7 +2,7 @@
 A supplement to the Grab Driver app. Essentially a map overlay that displays over the job cards to provide more information regarding the pick-up and drop-off locations.
 
 WIP:
-1) Improve accuracy of locations read. Currently, postal codes are used to pinpoint the locations, and the locations shown are occassionally wrong, especially in newer estates (case in point: Punggol)
+1) Improve accuracy of locations read. Currently, postal codes are used to pinpoint the locations, and the locations shown are occassionally wrong, especially in newer estates (case in point: Punggol) - Fixed?; used block + street instead for drop-off locations; more testings needed.
 2) Store the drop-off location to allow for early drop-off (*hint hint*)
 
 <br>
