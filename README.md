@@ -1,4 +1,7 @@
 # FloatMap
+
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/75c085ac74a34d95b410b5fbb773b691)](https://app.codacy.com/app/gowgos5/FloatMap?utm_source=github.com&utm_medium=referral&utm_content=gowgos5/FloatMap&utm_campaign=Badge_Grade_Dashboard)
+
 A supplement to the Grab Driver app. Essentially a map overlay that displays over the job cards to provide more information regarding the pick-up and drop-off locations.
 
 WIP:
