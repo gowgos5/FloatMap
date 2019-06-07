@@ -228,10 +228,12 @@ public class MapService extends AccessibilityService {
         for (int i = 0; i < mNodesList.size(); ++i) {
             if ("com.grabtaxi.driver2:id/item_jod_ad_address_keywords".equals(mNodesList.get(i).first)) {
                 if (addressType == 0) {
-                    pickupAddress = "Singapore " + extractDigits(mNodesList.get(++i).second.toString());
+                    // use postal code for pick-up address
+                    pickupAddress = "Singapore " + extractPostalCode(mNodesList.get(++i).second.toString());
                     addressType++;
                 } else {
-                    dropOffAddress = "Singapore " + extractDigits(mNodesList.get(++i).second.toString());
+                    // use block and street for drop-off address
+                    dropOffAddress = extractBlockAndStreet(mNodesList.get(++i).second.toString());
                     break;
                 }
             }
@@ -247,13 +249,18 @@ public class MapService extends AccessibilityService {
         mMapUrl = Uri.encode(BASE_MAP_URL+origin+destination+travel, ALLOWED_URI_CHARS);
     }
 
-    public static String extractDigits(final String in) {
+    private String extractPostalCode(final String address) {
         final Pattern p = Pattern.compile( "(\\d{6})" );
-        final Matcher m = p.matcher( in );
+        final Matcher m = p.matcher( address );
         if ( m.find() ) {
             return m.group( 0 );
         }
         return "";
+    }
+
+    private String extractBlockAndStreet(final String address) {
+        String[] s = address.split(",");
+        return (s[0] + s[1]);
     }
 
     private static void logViewHierarchy(AccessibilityNodeInfo nodeInfo, final int depth) {
