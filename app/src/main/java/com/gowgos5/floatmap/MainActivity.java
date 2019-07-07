@@ -15,6 +15,7 @@ import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.text.TextUtils;
 import android.util.Log;
+import android.widget.Toast;
 
 @TargetApi(23)
 public class MainActivity extends AppCompatActivity {
@@ -78,6 +79,9 @@ public class MainActivity extends AppCompatActivity {
 
             startService(new Intent(this, MapService.class)
                     .setAction(MapService.ACTION_START_MAP_SERVICE));
+
+            Toast.makeText(getBaseContext(), "Button spawned", Toast.LENGTH_LONG).show();
+            super.finishAndRemoveTask();
         } else {
             if (isServiceRunning(MapService.class)) {
                 startService(new Intent(this, MapService.class)
@@ -147,7 +151,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onStart() {
         Log.v("MainActivity", "MainActivity: onStart()");
-
         super.onStart();
     }
 

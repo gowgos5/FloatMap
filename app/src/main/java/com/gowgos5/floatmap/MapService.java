@@ -13,7 +13,9 @@ import android.content.SharedPreferences;
 import android.graphics.PixelFormat;
 import android.net.Uri;
 import android.os.Build;
+import android.os.PowerManager;
 import android.preference.PreferenceManager;
+import android.support.constraint.ConstraintLayout;
 import android.support.v4.app.NotificationCompat;
 import android.util.Log;
 import android.util.Pair;
@@ -26,6 +28,7 @@ import android.view.accessibility.AccessibilityNodeInfo;
 import android.webkit.GeolocationPermissions;
 import android.webkit.WebChromeClient;
 import android.webkit.WebView;
+import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.Toast;
 
@@ -35,11 +38,14 @@ import java.util.regex.Pattern;
 
 @TargetApi(26)
 public class MapService extends AccessibilityService {
+    private static final String TAG = MapService.class.getSimpleName();
+
     public static final String ACTION_START_MAP_SERVICE = "START_MAP_SERVICE";
     public static final String ACTION_STOP_MAP_SERVICE = "STOP_MAP_SERVICE";
-    public static final String ACTION_SPAWN_BUTTON_MAP_SERVICE = "SPAWN_BUTTON_MAP_SERVICE";
+    public static final String ACTION_TOGGLE_OVERLAY_MAP_SERVICE = "ACTION_TOGGLE_OVERLAY_MAP_SERVICE";
+    public static final String ACTION_TOGGLE_WAKELOCK_MAP_SERVICE = "ACTION_TOGGLE_WAKELOCK_MAP_SERVICE";
 
-    private static final String BASE_MAP_URL = "https://www.google.com/maps/dir/?api=1";
+    private static final String BASE_MAP_URL = "https://www.google.com/maps/place/Singapore";
     private static final String ALLOWED_URI_CHARS = "@#&=*+-_.,:!?()/~'%";
 
     private SharedPreferences mPreferences;
@@ -47,12 +53,15 @@ public class MapService extends AccessibilityService {
     private WindowManager mWindowManager;
     private WindowManager.LayoutParams mButtonParams;
     private WindowManager.LayoutParams mMapParams;
+    private WindowManager.LayoutParams mOverlayParams;
     private ImageView mButton;
     private WebView mMap;
+    private ConstraintLayout mOverlay;
+    private PowerManager.WakeLock mWakeLock;
 
     private ArrayList<Pair<String, CharSequence>> mNodesList;
     private Pair<String, String> mAddresses;
-    private String mMapUrl = "https://www.google.com/maps/";
+    private String mMapUrl = BASE_MAP_URL;
 
     private void createNotification() {
         // Create the NotificationChannel, but only on API 26+ because
@@ -67,24 +76,25 @@ public class MapService extends AccessibilityService {
                     .createNotificationChannel(channel);
         }
 
-        // Set up Notification
+        // Set up notification
         mNotification = new NotificationCompat.Builder(this, "MAP_SERVICE_ID")
-                .setSmallIcon(R.drawable.ic_map_icon)
+                .setSmallIcon(R.drawable.ic_map)
                 .setContentTitle("FloatMap")
                 .setContentText("MapService is running.")
                 .setOngoing(true)
                 .setPriority(0)
                 .setAutoCancel(false)
-                .setContentIntent(PendingIntent.getActivity(this, 0,
-                        new Intent(this, MainActivity.class)
-                                .setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP |
-                                        Intent.FLAG_ACTIVITY_SINGLE_TOP), 0))
-                .addAction(R.drawable.ic_refresh, "Respawn button",
+                .setContentIntent(null)
+                .addAction(R.drawable.ic_overlay, "Toggle overlay",
                         PendingIntent.getService(this, 1,
                                 new Intent(this, MapService.class)
-                                        .setAction(ACTION_SPAWN_BUTTON_MAP_SERVICE), 0))
+                                        .setAction(ACTION_TOGGLE_OVERLAY_MAP_SERVICE), 0))
+                .addAction(R.drawable.ic_lock, "Toggle wakelock",
+                        PendingIntent.getService(this, 2,
+                                new Intent(this, MapService.class)
+                                        .setAction(ACTION_TOGGLE_WAKELOCK_MAP_SERVICE), 0))
                 .addAction(R.drawable.ic_close, "Exit",
-                        PendingIntent.getService(this, 1,
+                        PendingIntent.getService(this, 3,
                                 new Intent(this, MapService.class)
                                         .setAction(ACTION_STOP_MAP_SERVICE), 0))
                 .build();
@@ -106,7 +116,7 @@ public class MapService extends AccessibilityService {
         mButtonParams.height = 120;
 
         mButton = new ImageView(this);
-        mButton.setImageResource(R.drawable.ic_map);
+        mButton.setImageResource(R.drawable.btn_map);
         //noinspection AndroidLintClickableViewAccessibility
         mButton.setOnTouchListener(new View.OnTouchListener() {
             private static final int MAX_CLICK_DURATION = 1000;
@@ -141,7 +151,7 @@ public class MapService extends AccessibilityService {
                         initialX = mButtonParams.x;
                         initialY = mButtonParams.y;
 
-                        // get touch location.
+                        // get touch position.
                         initialTouchX = event.getRawX();
                         initialTouchY = event.getRawY();
 
@@ -179,6 +189,28 @@ public class MapService extends AccessibilityService {
                 }
 
                 return true;
+            }
+        });
+    }
+
+    private void createTranslucentOverlay() {
+        mOverlayParams = new WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                PixelFormat.TRANSLUCENT);
+        mOverlayParams.gravity = Gravity.CENTER;
+
+        mOverlay = (ConstraintLayout) View.inflate(getBaseContext(), R.layout.layout_translucent_overlay, null);
+        ImageButton imbExit = mOverlay.findViewById(R.id.imvExit);
+        imbExit.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (mOverlay.isShown()) {
+                    mWindowManager.removeView(mOverlay);
+                    Toast.makeText(MapService.this.getBaseContext(), "Overlay removed", Toast.LENGTH_SHORT).show();
+                }
             }
         });
     }
@@ -275,7 +307,7 @@ public class MapService extends AccessibilityService {
         if ("android.widget.TextView".contentEquals(nodeInfo.getClassName())) {
             s = s.concat(" " + nodeInfo.getText());
         }
-        Log.d("MapService", s);
+        Log.d(TAG, s);
 
         for (int i = 0; i < nodeInfo.getChildCount(); ++i) {
             logViewHierarchy(nodeInfo.getChild(i), depth + 1);
@@ -289,8 +321,8 @@ public class MapService extends AccessibilityService {
         final int eventType = event.getEventType();
 
         // For debugging purposes
-        Log.d("MapService", event.toString());
-        Log.d("MapService", String.format(
+        Log.d(TAG, event.toString());
+        Log.d(TAG, String.format(
                 "onAccessibilityEvent: type = [ %s ], class = [ %s ], package = [ %s ]" +
                         ", time = [ %s ], text = [ %s ]",
                 eventType, event.getClassName(), event.getPackageName(),
@@ -303,7 +335,7 @@ public class MapService extends AccessibilityService {
 
         // Check if job card is received from Grab Driver App
         if ((event.getText().contains("Accept") && event.getClassName().equals("android.view.ViewGroup"))) {
-            Log.v("MapService", "Job card received");
+            Log.v(TAG, "Job card received");
 
             AccessibilityNodeInfo source = event.getSource();
             mNodesList = new ArrayList<>();
@@ -311,7 +343,7 @@ public class MapService extends AccessibilityService {
             getAddresses();
             updateMapUrl();
 
-            // Bring floating button to the topmost view
+            // Bring floating button to the top
             if (mButton.isShown()) mWindowManager.removeView(mButton);
             mWindowManager.addView(mButton, mButtonParams);
         }
@@ -319,57 +351,94 @@ public class MapService extends AccessibilityService {
 
     @Override
     public void onCreate() {
-        Log.v("MapService", "MapService: onCreate()");
+        Log.v(TAG, "MapService: onCreate()");
         super.onCreate();
 
         createNotification();
         createFloatingButton();
         createFloatingMapView();
+        createTranslucentOverlay();
 
         mPreferences = PreferenceManager.getDefaultSharedPreferences(getBaseContext());
         mPreferences.edit().putBoolean("isServiceEnabled", true).apply();
         if (!mButton.isShown()) mWindowManager.addView(mButton, mButtonParams);
         startForeground(1, mNotification);
+
+        // Initialise wakelock (proximity sensor)
+        PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+        mWakeLock = pm.newWakeLock(PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK, TAG);
     }
 
+    @SuppressLint("WakelockTimeout")
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent != null && intent.getAction() != null) {
             switch (intent.getAction()) {
                 case ACTION_START_MAP_SERVICE:
-                    Log.v("MapService", "MapService: onStartCommand(), ACTION_START_MAP_SERVICE");
+                    Log.v(TAG, "MapService: onStartCommand(), ACTION_START_MAP_SERVICE");
                     if (!mButton.isShown()) mWindowManager.addView(mButton, mButtonParams);
 
                     startForeground(1, mNotification);
                     break;
                 case ACTION_STOP_MAP_SERVICE:
-                    Log.v("MapService", "MapService: onStartCommand(), ACTION_STOP_MAP_SERVICE");
+                    Log.v(TAG, "MapService: onStartCommand(), ACTION_STOP_MAP_SERVICE");
                     mPreferences.edit().putBoolean("isServiceEnabled", false).apply();
                     if (mButton.isShown()) mWindowManager.removeView(mButton);
                     if (mMap.isShown()) mWindowManager.removeView(mMap);
+                    if (mOverlay.isShown()) mWindowManager.removeView(mOverlay);
 
+                    getBaseContext().sendBroadcast(new Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS));
                     stopForeground(true);
                     stopSelf();
                     break;
-                case ACTION_SPAWN_BUTTON_MAP_SERVICE:
-                    Log.v("MapService", "MapService: onStartCommand(), ACTION_SPAWN_BUTTON_MAP_SERVICE");
-                    if (mButton.isShown()) mWindowManager.removeView(mButton);
-                    mWindowManager.addView(mButton, mButtonParams);
+                case ACTION_TOGGLE_OVERLAY_MAP_SERVICE:
+                    Log.v(TAG, "MapService: onStartCommand(), ACTION_TOGGLE_OVERLAY_MAP_SERVICE");
+
+                    if (mOverlay.isShown()) {
+                        mWindowManager.removeView(mOverlay);
+                    } else {
+                        mWindowManager.addView(mOverlay, mOverlayParams);
+                    }
+
+                    getBaseContext().sendBroadcast(new Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS));
+                    Toast.makeText(getBaseContext(), "Overlay " + (mOverlay.isShown() ? "spawned" : "removed"),
+                            Toast.LENGTH_LONG).show();
+                    break;
+                case ACTION_TOGGLE_WAKELOCK_MAP_SERVICE:
+                    Log.v(TAG, "MapService: onStartCommand(), ACTION_TOGGLE_WAKELOCK_MAP_SERVICE");
+
+                    if (mWakeLock.isHeld()) {
+                        mWakeLock.release();
+                    } else {
+                        mWakeLock.acquire();
+                    }
+
+                    getBaseContext().sendBroadcast(new Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS));
+                    Toast.makeText(getBaseContext(), "Wakelock " + (mWakeLock.isHeld() ? "enabled" : "disabled"),
+                            Toast.LENGTH_LONG).show();
                     break;
             }
         }
 
-        return START_STICKY;
+        return START_NOT_STICKY;
+    }
+
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        super.onTaskRemoved(rootIntent);
+
+        Log.v(TAG, "MapService: onTaskRemoved()");
     }
 
     @Override
     public void onInterrupt() {
-        Log.v("MapService", "MapService: onInterrupt()");
+        Log.v(TAG, "MapService: onInterrupt()");
     }
 
     @Override
     public void onDestroy() {
-        Log.v("MapService", "MapService: onDestroy()");
+        Log.v(TAG, "MapService: onDestroy()");
         super.onDestroy();
+        if (mWakeLock.isHeld()) mWakeLock.release();
     }
 }
