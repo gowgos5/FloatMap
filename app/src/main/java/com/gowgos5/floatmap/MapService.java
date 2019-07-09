@@ -45,7 +45,7 @@ public class MapService extends AccessibilityService {
     public static final String ACTION_TOGGLE_OVERLAY_MAP_SERVICE = "ACTION_TOGGLE_OVERLAY_MAP_SERVICE";
     public static final String ACTION_TOGGLE_WAKELOCK_MAP_SERVICE = "ACTION_TOGGLE_WAKELOCK_MAP_SERVICE";
 
-    private static final String BASE_MAP_URL = "https://www.google.com/maps/place/Singapore";
+    private static final String BASE_MAP_URL = "https://www.google.com/maps/dir/?api=1";
     private static final String ALLOWED_URI_CHARS = "@#&=*+-_.,:!?()/~'%";
 
     private SharedPreferences mPreferences;
@@ -61,7 +61,7 @@ public class MapService extends AccessibilityService {
 
     private ArrayList<Pair<String, CharSequence>> mNodesList;
     private Pair<String, String> mAddresses;
-    private String mMapUrl = BASE_MAP_URL;
+    private String mMapUrl = "https://www.google.com/maps/place/Singapore";
 
     private void createNotification() {
         // Create the NotificationChannel, but only on API 26+ because
